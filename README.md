@@ -72,14 +72,12 @@ cd red-team-cheat-sheets
 ### 2. Navigate to a Folder
 
 ```
-cd Windows-Privilege-Escalation
+cd <specific-folder>
 ```
 
 Inside, you’ll find:
 
 * `cheat-sheet.md` – Fast reference CLI commands
-* `full-lab.md` – Walk‑through scenario
-* Supporting tools/scripts e.g., `enum.ps1`
 
 ### 3. Execute in Your Lab
 
