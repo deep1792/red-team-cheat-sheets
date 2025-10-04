@@ -47,6 +47,10 @@ Let’s simplify what happens under the hood:
   If not on blocklist → allow normal behavior.
   That’s it. The result: the target program runs, but some security DLLs never make it inside.
 
+![Bouncer analogy — GhostLoad LdrBlocker](https://miro.medium.com/v2/resize:fit:1100/format:webp/1*0aaGFGMSFbIC2GXh-e4hUQ.png)
+
+  
+
 Conclusion
 So, as conclusion most user-mode monitoring techniques rely on one or more of these visibility channels:
   In-process DLLs or libraries that register hooks or callbacks
