@@ -1,3 +1,7 @@
+GhostLoad — Blocking EDR libraries at runtime (LdrBlocker)
+
+Medium Blog -- https://medium.com/@deepanshu_khanna/ghostload-blocking-edr-libraries-at-runtime-ldrblocker-12aa5c03ef0a
+
 Imagine a busy nightclub — A bouncer (here GhostLoad) stands at the door and checks everyone coming in. He’s sloppy as he lets dangerous gangsters (here malicious processes), but the moment a sherif (EDR dlls such as “amsi.dll”, “mpoav.dll”, “mpengine.dl”, etc.) tries to enter, the bouncer slams the door (here blocks the EDR dlls). The people inside (malicious files threads or processes) keep partying, completely unaware that the one group who could have stopped bad things from happening never got in.
 
 That’s what a runtime DLL-blocking tool does to endpoint security: it prevents the security “inspectors” (EDR/AMSI libraries) from ever entering the running program, while leaving the program otherwise working at least from the program’s point of view.
