@@ -106,3 +106,8 @@
     python -m llmscan_pro.cli --target mock --suite owasp2025 --sample-size 1 --out results_ci --report results_ci/report.html
     
     # then upload results_ci to artifacts or S3 for analysis
+
+<meta property="og:image" content="https://github.com/deep1792/red-team-cheat-sheets/blob/main/llmscan_pro/images/LLM-generate.png">
+
+
+
