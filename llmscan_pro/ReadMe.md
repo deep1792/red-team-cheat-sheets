@@ -107,7 +107,7 @@
     
     # then upload results_ci to artifacts or S3 for analysis
 
-<meta property="og:image" content="https://github.com/deep1792/red-team-cheat-sheets/blob/main/llmscan_pro/images/LLM-generate.png">
+<meta property="og:image" content="https://github.com/deep1792/red-team-cheat-sheets/blob/main/llmscan_pro/images/LLM-generate.png?raw=true">
 
 
 
