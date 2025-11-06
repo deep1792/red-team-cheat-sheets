@@ -14,19 +14,19 @@
   All sensitive data redacted by design
 
   # Clone
-  git clone https://github.com/yourgithub/llmscan_pro.git
-  cd llmscan_pro
+      git clone https://github.com/yourgithub/llmscan_pro.git
+      cd llmscan_pro
   
   # Setup
-  python3 -m venv .venv
-  source .venv/bin/activate
-  pip install -r requirements.txt
+      python3 -m venv .venv
+      source .venv/bin/activate
+      pip install -r requirements.txt
 
   # install pytest if you will run tests
-  pip install pytest
+      pip install pytest
   
   # Run basic mock test
-  python -m llmscan_pro.cli --target mock --suite owasp2025 --sample-size 2 --out results --report results/report.html
+      python -m llmscan_pro.cli --target mock --suite owasp2025 --sample-size 2 --out results --report results/report.html
 
 **Supported Vulnerabilities**
   | OWASP ID | Category                  | Description                                 |
