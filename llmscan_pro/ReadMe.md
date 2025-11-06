@@ -1,7 +1,8 @@
-LLMScan Pro — An Open-Source LLM Security Scanner
+**LLMScan Pro — An Open-Source LLM Security Scanner**
 
-LLMScan Pro is an AI security toolkit for penetration testing, auditing, and red teaming large language models.
-Built to detect vulnerabilities aligned with the OWASP LLM Top 10 (2025) — prompt injection, RAG poisoning, sensitive data leaks, and more.
+    LLMScan Pro is an AI security toolkit for penetration testing, auditing, and red teaming large language models.
+
+    Built to detect vulnerabilities aligned with the OWASP LLM Top 10 (2025) — prompt injection, RAG poisoning, sensitive data leaks, and more.
 
 **Features**
   Supports OWASP LLM Top 10 (2025)
@@ -12,7 +13,6 @@ Built to detect vulnerabilities aligned with the OWASP LLM Top 10 (2025) — pro
   Includes automatic calibration to reduce false positives
   All sensitive data redacted by design
 
-**Quickstart**
   # Clone
   git clone https://github.com/yourgithub/llmscan_pro.git
   cd llmscan_pro
