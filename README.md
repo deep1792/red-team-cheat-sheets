@@ -1,7 +1,3 @@
-Here’s a polished and comprehensive `README.md` for your **deep1792/red-team-cheat-sheets** repo, mirroring the structure and depth of the Kubepwn style:
-
----
-
 # ⚔️ Red Team Cheat Sheets – Ultimate Collection of Hands‑On Attack Recipes
 
 **Red Team Cheat Sheets** aggregates a curated set of threat‑emulation labs and lateral‑movement guides across multiple platforms—Windows, Linux, AD, SQL Server, VOIP, prompt‑injection. It’s a go‑to resource for pentesters, red teamers, and security engineers looking to streamline red‑teaming techniques with ready-to-use steps, commands, and mappings to adversary techniques.
@@ -104,7 +100,7 @@ Enjoy the clarity and speed this collection brings to your red‑team labs and p
 
 ## Support This Project via UPI 🇮🇳
 
-If you find **Kubepwn** useful and want to support its development, you can send a payment via UPI:
+If you find **Repo** useful and want to support its development, you can send a payment via UPI:
 
 **UPI ID:** "alivejatt@oksbi"
 
