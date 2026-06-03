@@ -18,17 +18,6 @@ To provide:
 
 ---
 
-## 🧭 Repository Structure
-
-```
-red-team-cheat-sheets/
-├── Complete-AD-Red-Team-Cheatsheet/  # Domain/AD focused escalation & persistence
-├── Linux-privilege-escalation/      # Linux enumeration → privilege escalation
-├── Prompt-Injections/               # Techniques for CLI & SQL prompt injections
-├── RedTeamSQLServerCheatSheet/      # SQL Server attack recipes
-├── VOIP-Red-Team/                   # VOIP protocol exploitation scenarios
-└── Windows-Privilege-Escalation/    # Windows local enumeration & escalation
-```
 
 Each folder contains:
 
@@ -36,20 +25,6 @@ Each folder contains:
 * **Full‑lab.md** detailing end‑to‑end scenario walkthroughs and context
 * Supporting scripts or configuration files where applicable
 
----
-
-## 💣 Attack Categories
-
-| Folder                              | Focus Area                      | Description                                            |
-| ----------------------------------- | ------------------------------- | ------------------------------------------------------ |
-| **Complete‑AD‑Red‑Team‑Cheatsheet** | Active Directory Domain Attacks | From enumeration to DC compromise and persistence      |
-| **Linux‑privilege‑escalation**      | Linux Local Escalation          | Sudo misconfigs, SUIDs, cron, kernel exploits          |
-| **Prompt‑Injections**               | Shell & SQL Prompt Manipulation | Command‑line injection, SQLi in interactive prompts    |
-| **RedTeamSQLServerCheatSheet**      | SQL Server Attacks              | Auth bypass, xp\_cmdshell, CLR inject                  |
-| **VOIP‑Red‑Team**                   | VoIP Exploitation Scenarios     | SIP trunk attacks, call spoofing, VoIP forensic bypass |
-| **Windows‑Privilege‑Escalation**    | Windows Local Escalation        | UAC bypass, weak services, unquoted paths              |
-
----
 
 ## 🎯 Cheat‑Sheet Features
 
