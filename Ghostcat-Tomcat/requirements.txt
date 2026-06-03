@@ -1,0 +1,2 @@
+# Optional: required only if you need SOCKS5 proxy support
+PySocks==1.7.1
