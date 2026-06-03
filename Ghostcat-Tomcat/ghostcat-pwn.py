@@ -2,7 +2,7 @@
 """
 Ghostcat Exploitation & Pentesting Tool (CVE-2020-1938)
 Author: j0ck3r
-GitHub: github.com/j0ck3r/ghostcat-pwn
+GitHub: https://github.com/deep1792/red-team-cheat-sheets/edit/main/Ghostcat-Tomcat/ghostcat-pwn.py
 
 Features:
   - Vulnerability check & port scan
